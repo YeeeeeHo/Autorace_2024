@@ -1,0 +1,333 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from turtle import turtlesize
+import rospy, roslaunch, os
+from enum import Enum
+from std_msgs.msg import UInt8
+ 
+class CoreNodeController():
+    def __init__(self):
+        self.ros_package_path = os.path.dirname(os.path.realpath(__file__))
+        self.ros_package_path = self.ros_package_path.replace('core/nodes', '')
+
+        # Subscriber
+        self.sub_mission = rospy.Subscriber('/mission', UInt8, self.cbReceiveMode, queue_size=1)
+
+        # Sub from each mission step data
+        # example
+        # rospy.Subscriber('/mission/intersection', UInt8, self.cbIntersectionStep, queue_size=1)
+        rospy.Subscriber('/mission/turtlesim', UInt8, self.cbTurtleStep, queue_size=1)
+
+        self.Mission = Enum('Mission', 'Idle TrafficLight Intersection Construction Parking LevelCrossing Tunnel')
+        #self.Mission = Enum('Mission', 'Idle, OpenTurtleSim CloseTurtleSim')
+        #self.Mission = Enum('Mission', 'Idle, DetectLane ControLane Intersection')
+
+        # each mission step enum
+        #self.IntersectionStep = Enum('IntersectionStep', 'default process')
+        self.TurtlesimStep = Enum('TurtlesimStep', 'turtlesim turtleteleop')
+
+        self.is_triggered = False
+        self.current_mode = self.Mission.Idle.value
+        # self.current_step_intersection = self.IntersectionStep.default.value
+        self.current_setp_turtlesim = self.TurtlesimStep.turtlesim.value
+
+        # launcher enum
+        #self.Launcher = Enum('Launcher', 'turtlesim turtleteleop')
+        self.Launcher = Enum('Launcher', 'dl cl tf di co pa le tu cm ct')
+        self.launch_turtlesim_launched = False
+        self.launch_turtleteleop_launched = False
+        self.launch_dl = False
+        self.launch_cl = False
+        self.launch_tf = False
+        self.launch_di = False
+        self.launch_co = False
+        self.launch_pa = False
+        self.launch_le = False
+        self.launch_tu = False
+        self.launch_cm = False
+        self.launch_ct = False
+
+        self.uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+        
+        loop_rate = rospy.Rate(10) # 10hz
+
+        while not rospy.is_shutdown():
+            if self.is_triggered == True:
+                self.fnControlNode()
+            
+            loop_rate.sleep()
+
+    def cbReceiveMode(self, mode_msg):
+        rospy.loginfo("starts the progress with %d", mode_msg.data)
+        
+        self.current_mode = mode_msg.data
+        self.is_triggered = True
+
+    # create callback function
+    # example
+    # def cbIntersectionStep(self, mode_msg):
+    #     self.current_step_intersection = mode_msg.data
+    #     self.is_triggered = True
+
+    def cbTurtleStep(self, mode_msg):
+        self.current_setp_turtlesim = mode_msg.data
+        self.is_triggered = True
+
+    def fnControlNode(self):
+        
+        if self.current_mode == self.Mission.TrafficLight.value: #1
+            rospy.loginfo("Traffic_Light")
+            self.fnLaunch(self.Launcher.tf.value,True)
+
+        
+        elif self.current_mode == self.Mission.Intersection.value: #2
+            rospy.loginfo("Intersection")
+            self.fnLaunch(self.Launcher.di.value,True)
+            self.fnLaunch(self.Launcher.dl.value,True)
+            self.fnLaunch(self.Launcher.cl.value,True)
+            self.fnLaunch(self.Launcher.tf.value,False)
+            
+
+
+        elif self.current_mode == self.Mission.Construction.value: #3
+            rospy.loginfo("Construction")
+            self.fnLaunch(self.Launcher.co.value,True)
+            self.fnLaunch(self.Launcher.dl.value,True)
+            self.fnLaunch(self.Launcher.cl.value,True)
+            self.fnLaunch(self.Launcher.di.value,False)
+            
+
+        elif self.current_mode == self.Mission.Parking.value: #4
+            rospy.loginfo("Parking")
+            self.fnLaunch(self.Launcher.dl.value,True)
+            self.fnLaunch(self.Launcher.cl.value,True)
+            rospy.sleep(5.5)
+            self.fnLaunch(self.Launcher.dl.value,False)
+            self.fnLaunch(self.Launcher.cl.value,False)
+            self.fnLaunch(self.Launcher.cm.value,True)
+            self.fnLaunch(self.Launcher.pa.value,True)
+            
+            self.fnLaunch(self.Launcher.co.value,False)
+            
+
+
+        elif self.current_mode == self.Mission.LevelCrossing.value: #5
+            rospy.loginfo("Level_Crossing")
+            
+            self.fnLaunch(self.Launcher.cm.value,False)
+            self.fnLaunch(self.Launcher.pa.value,False)
+            self.fnLaunch(self.Launcher.dl.value,True)
+            self.fnLaunch(self.Launcher.cl.value,True)
+            self.fnLaunch(self.Launcher.le.value,True)
+            
+            
+
+        elif self.current_mode == self.Mission.Tunnel.value: #6
+            rospy.loginfo("Tunnel")
+            self.fnLaunch(self.Launcher.dl.value,True)
+            self.fnLaunch(self.Launcher.cl.value,True)
+            self.fnLaunch(self.Launcher.le.value,False)
+            self.fnLaunch(self.Launcher.tu.value,True)
+            self.fnLaunch(self.Launcher.ct.value,True)
+            #self.fnLaunch(self.Launcher.cm.value,True)
+
+
+        self.is_triggered = False
+
+    def fnLaunch(self, launch_num, is_start):
+        if launch_num == self.Launcher.cm.value:
+            if is_start == True:
+                if self.launch_cm ==False:
+                    self.cm = roslaunch.scriptapi.ROSLaunch()
+                    self.cm = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "control/launch/control_moving.launch"])
+                    self.launch_cm = True
+                    self.cm.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_le == True:
+                    self.launch_le = False
+                    self.le.shutdown()
+
+                else:
+                    pass
+        if launch_num == self.Launcher.tu.value:
+            if is_start == True:
+                if self.launch_tu ==False:
+                    self.tu = roslaunch.scriptapi.ROSLaunch()
+                    self.tu = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "detect/launch/detect_tunnel.launch"])
+                    self.launch_tu = True
+                    self.tu.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_le == True:
+                    self.launch_le = False
+                    self.le.shutdown()
+
+                else:
+                    pass
+        if launch_num == self.Launcher.ct.value:
+            if is_start == True:
+                if self.launch_ct ==False:
+                    self.ct = roslaunch.scriptapi.ROSLaunch()
+                    self.ct = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "control/launch/control_tunnel.launch"])
+                    self.launch_ct = True
+                    self.ct.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_le == True:
+                    self.launch_le = False
+                    self.le.shutdown()
+
+                else:
+                    pass
+        if launch_num == self.Launcher.le.value:
+            if is_start == True:
+                if self.launch_le ==False:
+                    self.le = roslaunch.scriptapi.ROSLaunch()
+                    self.le = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "detect/launch/detect_level.launch"])
+                    self.launch_le = True
+                    self.le.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_le == True:
+                    self.launch_le = False
+                    self.le.shutdown()
+
+                else:
+                    pass
+
+        if launch_num == self.Launcher.pa.value:
+            if is_start == True:
+                if self.launch_pa ==False:
+                    self.pa = roslaunch.scriptapi.ROSLaunch()
+                    self.pa = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "detect/launch/detect_parking.launch"])
+                    self.launch_pa = True
+                    self.pa.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_pa == True:
+                    self.launch_pa = False
+                    self.pa.shutdown()
+
+                else:
+                    pass
+
+
+        if launch_num == self.Launcher.co.value:
+            if is_start == True:
+                if self.launch_co ==False:
+                    self.co = roslaunch.scriptapi.ROSLaunch()
+                    self.co = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "detect/launch/detect_construction.launch"])
+                    self.launch_co = True
+                    self.co.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_co == True:
+                    self.launch_co = False
+                    self.co.shutdown()
+
+                else:
+                    pass
+        
+        if launch_num == self.Launcher.di.value:
+            if is_start == True:
+                if self.launch_di ==False:
+                    self.di = roslaunch.scriptapi.ROSLaunch()
+                    self.di = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "detect/launch/detect_intersection.launch"])
+                    self.launch_di = True
+                    self.di.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_di == True:
+                    self.launch_di = False
+                    self.di.shutdown()
+
+                else:
+                    pass
+        
+        if launch_num == self.Launcher.tf.value:
+            if is_start == True:
+                if self.launch_tf ==False:
+                    self.tf = roslaunch.scriptapi.ROSLaunch()
+                    self.tf = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "detect/launch/detect_traffic_light.launch"])
+                    self.launch_tf = True
+                    self.tf.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_tf == True:
+                    self.launch_tf = False
+                    self.tf.shutdown()
+
+                else:
+                    pass
+
+        if launch_num == self.Launcher.dl.value:
+            if is_start == True:
+                if self.launch_dl ==False:
+                    self.dl = roslaunch.scriptapi.ROSLaunch()
+                    self.dl = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "detect/launch/detect_lane.launch"])
+                    self.launch_dl = True
+                    self.dl.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_dl == True:
+                    self.launch_dl = False
+                    self.dl.shutdown()
+
+                else:
+                    pass
+
+        if launch_num == self.Launcher.cl.value:
+            if is_start == True:
+                if self.launch_cl ==False:
+                    self.cl = roslaunch.scriptapi.ROSLaunch()
+                    self.cl = roslaunch.parent.ROSLaunchParent(self.uuid,[self.ros_package_path + "control/launch/control_lane.launch"])
+                    self.launch_cl = True
+                    self.cl.start()
+                
+                else:
+                    pass
+                    
+            else:
+                if self.launch_cl == True:
+                    self.launch_cl = False
+                    self.cl.shutdown()
+
+                else:
+                    pass
+
+    def main(self):
+        rospy.spin()
+
+if __name__ == '__main__':
+    rospy.init_node('core_node_controller')
+    node = CoreNodeController()
+    node.main()
